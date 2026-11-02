@@ -80,6 +80,13 @@ interface UiState {
   panelWidth: number;
   /** Material node currently open in the reading overlay (session only). */
   readerNodeId: string | null;
+  /** Workspace tabs: the canvas is the permanent first tab; materials open
+      beside it and can be closed. `nodeId` doubles as the tab id. */
+  materialTabs: { nodeId: string; title: string }[];
+  activeWorkspaceTab: string; // 'canvas' or a material nodeId
+  openMaterialTab: (nodeId: string, title: string) => void;
+  closeMaterialTab: (nodeId: string) => void;
+  setActiveWorkspaceTab: (id: string) => void;
   /** One-shot landing spot for the reader: scroll to this page and open this
       thread on mount (set by canvas p.N chips, consumed by the overlay). */
   readerJump: { page?: number; threadId?: string } | null;
@@ -110,6 +117,13 @@ interface UiState {
   setRoleLib: (lib: import('./role-templates').RoleLib) => void;
   roleManagerOpen: boolean;
   setRoleManagerOpen: (open: boolean) => void;
+  /** Situation-specific system prompts for study answers (editable). */
+  studyPrompts: { id: string; name: string; prompt: string }[];
+  studyDefaultPromptId: string | null;
+  studyPromptsOpen: boolean;
+  setStudyPrompts: (prompts: { id: string; name: string; prompt: string }[]) => void;
+  setStudyDefaultPromptId: (id: string | null) => void;
+  setStudyPromptsOpen: (open: boolean) => void;
   /** Image reading / Recognize model: 'auto' = strongest first (persisted). */
   visionModelPref: string;
   setVisionModelPref: (id: string) => void;
@@ -297,6 +311,17 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
   roleManagerOpen: false,
   setRoleManagerOpen: (open) => set({ roleManagerOpen: open }),
+  studyPrompts: [
+    { id: 'study-concept', name: '概念讲解', prompt: '先用一句话给出结论，再用直觉或类比解释，然后给正式定义、适用条件和边界；最后指出最常见的误解。不要省略关键前提。' },
+    { id: 'study-derive', name: '公式推导', prompt: '按步骤推导，每一步写明依据（定义、定理或假设），不要跳代数；最后做量纲或特例检查，并说明公式什么时候不能用。' },
+    { id: 'study-exam', name: '做题教练', prompt: '先判断题型、已知和所求，再给解题步骤；在每一步旁边指出易错点和检查方法；最后总结可迁移的套路，不要只给答案。' },
+    { id: 'study-review', name: '复习提纲', prompt: '输出三层：必须记住的结论与公式、最容易混淆的点、可用于自测的问题。每层都给出原文依据或页码线索。' },
+  ],
+  studyDefaultPromptId: null,
+  studyPromptsOpen: false,
+  setStudyPrompts: (studyPrompts) => set({ studyPrompts }),
+  setStudyDefaultPromptId: (studyDefaultPromptId) => set({ studyDefaultPromptId }),
+  setStudyPromptsOpen: (studyPromptsOpen) => set({ studyPromptsOpen }),
   visionModelPref: localStorage.getItem('thoughtdag.visionModel') || 'auto',
   setVisionModelPref: (id) => {
     localStorage.setItem('thoughtdag.visionModel', id);
@@ -390,7 +415,20 @@ export const useUiStore = create<UiState>((set, get) => ({
   setViewerLoadError: (v) => set({ viewerLoadError: v }),
   readerNodeId: null,
   readerJump: null,
-  setReaderNodeId: (id, jump) => set({ readerNodeId: id, readerJump: id ? (jump ?? null) : null }),
+  materialTabs: [],
+  activeWorkspaceTab: 'canvas',
+  openMaterialTab: (nodeId, title) => set((s) => ({
+    materialTabs: s.materialTabs.some((t) => t.nodeId === nodeId) ? s.materialTabs : [...s.materialTabs, { nodeId, title }],
+    activeWorkspaceTab: nodeId,
+    readerNodeId: nodeId,
+  })),
+  closeMaterialTab: (nodeId) => set((s) => ({
+    materialTabs: s.materialTabs.filter((t) => t.nodeId !== nodeId),
+    activeWorkspaceTab: s.activeWorkspaceTab === nodeId ? 'canvas' : s.activeWorkspaceTab,
+    readerNodeId: s.readerNodeId === nodeId ? null : s.readerNodeId,
+  })),
+  setActiveWorkspaceTab: (id) => set({ activeWorkspaceTab: id, readerNodeId: id === 'canvas' ? null : id }),
+  setReaderNodeId: (id, jump) => set({ readerNodeId: id, readerJump: id ? (jump ?? null) : null, ...(id ? {} : { activeWorkspaceTab: 'canvas' }) }),
   readerMode: localStorage.getItem('thoughtdag.readerMode') === 'dock' ? 'dock' : 'full',
   readerWidth: (() => { const raw = localStorage.getItem('thoughtdag.readerWidth'); const n = raw ? parseInt(raw, 10) : NaN; return Number.isFinite(n) ? n : 760; })(),
   setReaderMode: (mode) => { localStorage.setItem('thoughtdag.readerMode', mode); set({ readerMode: mode }); },

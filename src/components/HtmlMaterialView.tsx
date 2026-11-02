@@ -55,6 +55,18 @@ export function HtmlMaterialView({ att, onSelect, clipMode, onClipped, baseUrl }
       </div>
     );
   }
+  // A single-page article becomes the scrolling surface itself: the iframe
+  // fills the reader, its own document scrolls, and `position: sticky` in the
+  // page's left rail finally sticks (a content-height iframe has no viewport
+  // to stick to). Decks keep the stacked-page layout.
+  const fill = pages.length === 1 && pages[0].page === null;
+  if (fill) {
+    return (
+      <div className="w-full h-full min-h-0" data-html-fill>
+        <PageFrame fill srcdoc={pages[0].srcdoc} page={null} onSelect={onSelect} clipMode={clipMode} onClipped={onClipped} clipFailedText={t('reader.clipFailed')} />
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col items-center py-6 px-4">
       {pages.map((p) => (
@@ -69,13 +81,14 @@ export function HtmlMaterialView({ att, onSelect, clipMode, onClipped, baseUrl }
   );
 }
 
-function PageFrame({ srcdoc, page, onSelect, clipMode, onClipped, clipFailedText }: {
+function PageFrame({ srcdoc, page, onSelect, clipMode, onClipped, clipFailedText, fill }: {
   srcdoc: string;
   page: number | null;
   onSelect: (sel: HtmlSelection | null) => void;
   clipMode?: boolean;
   onClipped?: (pageNo: number, rect: [number, number, number, number], dataUrl: string, screenRect?: { left: number; top: number; width: number; height: number }) => void;
   clipFailedText: string;
+  fill?: boolean;
 }) {
   const holderRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLIFrameElement>(null);
@@ -92,7 +105,32 @@ function PageFrame({ srcdoc, page, onSelect, clipMode, onClipped, clipFailedText
     const bw = idoc.body.scrollWidth || idoc.documentElement.scrollWidth;
     const cw = frame.clientWidth;
     if (bw > cw + 2) (idoc.body.style as CSSStyleDeclaration & { zoom: string }).zoom = String(cw / bw);
-    setHeight(Math.max(40, idoc.documentElement.scrollHeight + 2));
+    if (!fill) setHeight(Math.max(40, idoc.documentElement.scrollHeight + 2));
+
+    // The page's own TOC stays put because the iframe now has a viewport;
+    // mark the section currently under the top edge. Generic: any anchor
+    // target that exists, no deck-specific class names.
+    if (fill) {
+      const win = idoc.defaultView;
+      const links = Array.from(idoc.querySelectorAll<HTMLAnchorElement>('a[href^="#"]'));
+      const targets = links.map((a) => {
+        const id = decodeURIComponent((a.getAttribute('href') ?? '').slice(1));
+        return { a, el: id ? idoc.getElementById(id) : null };
+      }).filter((x): x is { a: HTMLAnchorElement; el: HTMLElement } => !!x.el);
+      const mark = () => {
+        let best: HTMLAnchorElement | null = null;
+        let bestTop = -Infinity;
+        for (const { a, el } of targets) {
+          const top = el.getBoundingClientRect().top;
+          if (top <= 96 && top > bestTop) { best = a; bestTop = top; }
+        }
+        for (const a of links) a.classList.remove('tdag-active');
+        best?.classList.add('tdag-active');
+      };
+      win?.addEventListener('scroll', mark, { passive: true });
+      idoc.addEventListener('scroll', mark, { passive: true });
+      setTimeout(mark, 150);
+    }
 
     idoc.addEventListener('mouseup', () => {
       const sel = frame.contentWindow?.getSelection();
@@ -141,14 +179,14 @@ function PageFrame({ srcdoc, page, onSelect, clipMode, onClipped, clipFailedText
   };
 
   return (
-    <div ref={holderRef} className="relative">
+    <div ref={holderRef} className={`relative ${fill ? 'h-full' : ''}`}>
       <iframe
         ref={ref}
         sandbox="allow-same-origin"
         srcDoc={srcdoc}
         onLoad={handleLoad}
-        style={{ height }}
-        className="w-full border-0 bg-white shadow-md rounded-sm"
+        style={{ height: fill ? '100%' : height }}
+        className={`w-full border-0 bg-white shadow-md rounded-sm ${fill ? 'h-full' : ''}`}
         // aria-label, not title: a title tooltip pops on hover anywhere over
         // the page surface — reader noise
         aria-label={page != null ? `p.${page}` : 'document'}

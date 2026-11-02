@@ -20,7 +20,7 @@ import { llmCall, type ContextMessage } from './api';
 import { useUiStore } from './ui-store';
 import { backgroundCall, BACKGROUND_TIMEOUT_MS } from './background-model';
 import type { Ladder, LadderItem } from '../types';
-import { isCJK, sentencesOf, tokenize, budget, size, words } from './ladder-core';
+import { isCJK, sentencesOf, tokenize, budget, size, words, mathToText } from './ladder-core';
 import { countTokens } from '../utils';
 export * from './ladder-core';
 
@@ -53,7 +53,7 @@ export interface LadderOptions {
   parentAnswer?: string;
 }
 const normSentence = (x: string) => x.toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
-const str = (v: unknown): string => typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '';
+const str = (v: unknown): string => typeof v === 'string' ? mathToText(v).replace(/\s+/g, ' ').trim() : '';
 const END_PUNCT = /[。.!?！？；;，,]+$/;
 /** a written level as free-text items: one per word, carrying its trailing space (the local ladder's convention) */
 const free = (text: string, lang: 'zh' | 'en'): LadderItem[] => tokenize(text, lang).map((t) => t.t + (t.space ? ' ' : ''));

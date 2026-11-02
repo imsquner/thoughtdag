@@ -29,6 +29,11 @@ export const createLlmSlice: StateCreator<StoreState, [], [], LlmSlice> = (set, 
     // global picker sits on something else. No pin on the parent = keep
     // following the global pick (undefined), as before.
     const inheritedModel = parentId ? get().nodes.find((n) => n.id === parentId)?.data.model : undefined;
+    // A study constraint set as default rides on new questions unless the
+    // caller supplies an explicit role (an explicit choice always wins).
+    const studyDefault = useUiStore.getState().studyDefaultPromptId
+      ? useUiStore.getState().studyPrompts.find((p) => p.id === useUiStore.getState().studyDefaultPromptId)?.prompt
+      : undefined;
     const newNode: ThoughtNode = {
       id,
       type: 'thought',
@@ -56,7 +61,7 @@ export const createLlmSlice: StateCreator<StoreState, [], [], LlmSlice> = (set, 
           : [],
         includedAttachmentIds: [],
         roleMode: inheritRole === false ? 'reset' : 'inherit',
-        rolePrompt: rolePrompt || undefined,
+        rolePrompt: rolePrompt || studyDefault || undefined,
         isRoot,
         isBranch: !!branchContext,
         // Search permissions are per-ask: snapshot the toggles shown next to

@@ -35,6 +35,7 @@ import { REPO_URL, useGithubStars, formatStars } from './lib/github-stars';
 import DiagnosticsPanel from './components/DiagnosticsPanel';
 import MaterialReader from './components/MaterialReader';
 import ProjectSwitcher from './components/ProjectSwitcher';
+import WorkspaceTabs from './components/WorkspaceTabs';
 import SessionAtlas from './components/SessionAtlas';
 import { useStore } from './store';
 import { undoState } from './store/slices/history';
@@ -65,6 +66,7 @@ import ConfirmDialog from './components/ui/ConfirmDialog';
 import Toaster from './components/ui/Toaster';
 import GlobalTooltip from './components/ui/GlobalTooltip';
 import RoleManagerModal from './components/ui/RoleManagerModal';
+import StudyPromptsModal from './components/ui/StudyPromptsModal';
 import MemoryManagerModal from './components/ui/MemoryManagerModal';
 import ApiKeyModal from './components/ui/ApiKeyModal';
 import ResponseViewer from './components/ui/ResponseViewer';
@@ -195,6 +197,7 @@ export default function App() {
       <LadderJobCard />
       <GlobalTooltip />
       <RoleManagerModal />
+      <StudyPromptsModal />
       <MemoryManagerModal />
       <ApiKeyModal />
       <ResponseViewer />
@@ -1075,6 +1078,19 @@ function Canvas() {
     return () => clearTimeout(timer);
   }, [panelOpen, selectedNodeId]);
 
+  // Opening a material (double-click, a p.N chip, an import) turns it into a
+  // workspace tab. The canvas stays tab zero; materials open beside it.
+  const readerNodeId = useUiStore((s) => s.readerNodeId);
+  useEffect(() => {
+    if (!readerNodeId) return;
+    const n = useStore.getState().nodes.find((x) => x.id === readerNodeId);
+    if (!n) return;
+    const title = n.data.attachments?.[0]?.name || n.data.linkTitle || n.data.question?.slice(0, 48) || 'Material';
+    const ui = useUiStore.getState();
+    ui.openMaterialTab(n.id, title);
+    if (ui.readerMode !== 'full') ui.setReaderMode('full');
+  }, [readerNodeId]);
+
   // The docked reader: a column on the left the canvas steps aside for
   // (lib/reader-dock decides its width, or 0). While it is up, the reader
   // follows the selection: a selected material shows in it, and a question
@@ -1104,6 +1120,7 @@ function Canvas() {
 
   return (
     <div className="relative w-full h-full" data-searching={searching || undefined}>
+      <WorkspaceTabs />
       {/* Canvas — steps aside by the docked reader's width; the focus panel floats on top of it */}
       <div
         className="absolute inset-y-0 right-0"
@@ -1827,6 +1844,14 @@ function Canvas() {
                 </button>
               )}
               <button
+                onClick={() => { setMoreOpen(false); useUiStore.getState().setStudyPromptsOpen(true); }}
+                className="w-full text-left px-3 py-2 text-xs text-ink hover:bg-wash transition-colors flex items-center gap-2.5"
+                title={t('study.hint')}
+                data-study-prompts
+              >
+                <Brain size={14} strokeWidth={1.75} className="text-ink-faint shrink-0" /> {t('study.menu')}
+              </button>
+              <button
                 onClick={() => { setMoreOpen(false); setWheelPans(!wheelPans); }}
                 className="w-full text-left px-3 py-2 text-xs text-ink hover:bg-wash transition-colors flex items-center gap-2.5"
                 title={t('toolbar.wheelPansTitle')}
@@ -2122,13 +2147,21 @@ function Canvas() {
 
       {/* Material reading overlay: select a passage, ask, the node lands on
           the canvas immediately (a view onto the material, not a container) */}
-      <MaterialReader onLocate={(id) => {
-        const n = useStore.getState().nodes.find((x) => x.id === id);
-        if (n) {
-          setSelectedNodeId(id);
-          centerNode(n, { zoom: 1 });
-        }
-      }} />
+      <MaterialReader
+        tabbed
+        onClose={() => {
+          const ui = useUiStore.getState();
+          if (ui.readerNodeId) ui.closeMaterialTab(ui.readerNodeId);
+        }}
+        onLocate={(id) => {
+          const n = useStore.getState().nodes.find((x) => x.id === id);
+          useUiStore.getState().setActiveWorkspaceTab('canvas');
+          if (n) {
+            setSelectedNodeId(id);
+            centerNode(n, { zoom: 1 });
+          }
+        }}
+      />
     </div>
   );
 }

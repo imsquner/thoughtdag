@@ -26,6 +26,7 @@ import FanOutModal from './FanOutModal';
 import ReasoningDisclosure from './ui/ReasoningDisclosure';
 import ZoomText from './ZoomText';
 import { useLocalLadder } from '../lib/local-ladder-cache';
+import { mathToText } from '../lib/ladder-core';
 import { estimateNodeHeight } from '../lib/layout';
 import { COLLAPSED_LAYOUT_HEIGHT, LAYOUT_V_GAP } from '../lib/constants';
 import { levelText } from '../lib/ladder-core';
@@ -535,13 +536,13 @@ export default function ThoughtNode({ id, data }: NodeProps<ThoughtNodeType>) {
             isRoot ? (
               <>
                 <div className="text-2xl font-semibold text-ink leading-snug line-clamp-3 shrink-0">
-                  {data.question}
+                  {mathToText(data.question)}
                 </div>
                 {versionLadder ? (
                   <div ref={plaqueLine} className="mt-1.5 min-h-0 shrink overflow-hidden" data-plaque-line><ZoomText ladder={versionLadder} /></div>
                 ) : (
                 <div className="text-lg text-ink-muted leading-snug line-clamp-2 mt-1.5">
-                  {versionSummary || data.response.replace(/[#*`>-]/g, '').slice(0, 140)}
+                  {versionSummary || mathToText(data.response).replace(/[#*`>-]/g, '').slice(0, 140)}
                 </div>
                 )}
               </>
@@ -553,7 +554,7 @@ export default function ThoughtNode({ id, data }: NodeProps<ThoughtNodeType>) {
               // turning points read first.
               <>
                 <div className="text-lg text-ink-muted leading-snug line-clamp-2 shrink-0">
-                  {data.question}
+                  {mathToText(data.question)}
                 </div>
                 {versionLadder ? (
                   <div ref={plaqueLine} className="mt-1.5 min-h-0 shrink overflow-hidden" title={!badge && conclusiveNote ? conclusiveNote : undefined} data-plaque-line>
@@ -561,7 +562,7 @@ export default function ThoughtNode({ id, data }: NodeProps<ThoughtNodeType>) {
                   </div>
                 ) : (
                 <div className={`text-2xl font-semibold leading-snug line-clamp-3 mt-1.5 ${badge || settled ? 'text-ink' : 'text-ink-muted'}`} title={!badge && conclusiveNote ? conclusiveNote : undefined} data-plaque-line={badge ? 'badge' : settled ? 'settled' : 'topic'}>
-                  {(badge || settled ? versionSummary : (activeTopic(data) ?? versionSummary)) || data.response.replace(/[#*`>-]/g, '').slice(0, 140)}
+                  {(badge || settled ? versionSummary : (activeTopic(data) ?? versionSummary)) || mathToText(data.response).replace(/[#*`>-]/g, '').slice(0, 140)}
                 </div>
                 )}
               </>

@@ -15,6 +15,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useStore as useRfStore } from '@xyflow/react';
 import type { Ladder } from '../types';
 import { LEVEL_FONT, pickLevel, ladderPieces, needsSpace, type LadderLevel } from '../lib/ladder';
+import { mathToText } from '../lib/ladder-core';
 
 const DUR = 320;
 const EASE = 'cubic-bezier(.2,.7,.2,1)';
@@ -78,13 +79,17 @@ export function LadderMorph({ ladder, level, fontSize, ink = true, weight = 'fon
   // browser breaks lines freely, so a 。 or , in its own box could open a line, which the line-breaking
   // rules forbid for text. A closing mark rides with the word before it, an opening one with the word after.
   const segments: { id: string; text: string; skeleton: boolean }[] = [];
+  // Stored ladders (and model summaries written before the TeX cleanup) can
+  // still carry \(f\) or \frac; a token-level pass removes what it can and
+  // leaves readable prose at every zoom tier.
+  const texts = items.map((p) => mathToText(p.text));
   let opening = '';
   items.forEach((p, n) => {
-    const glue = n + 1 < items.length && needsSpace(p.text, p.space, items[n + 1].text) ? ' ' : '';
+    const glue = n + 1 < items.length && needsSpace(texts[n], p.space, texts[n + 1]) ? ' ' : '';
     const isSkeleton = skeleton ? skeleton.has(p.id) : true;
     const last = segments[segments.length - 1];
     if (OPENING.test(p.text) && n + 1 < items.length) { opening += p.text + glue; return; }
-    const text = opening + p.text + glue;
+    const text = opening + texts[n] + glue;
     opening = '';
     if (CLOSING.test(p.text) && last) last.text += text;
     else if (!isSkeleton && last && !last.skeleton) last.text += text;

@@ -23,8 +23,103 @@ export const HANDOFF_HYST = 1.2;
 export const LOCAL_LADDER_MIN_CHARS = 1;
 
 export const isCJK = (s: string): boolean => /[぀-ヿ㐀-鿿]/.test(s);
+
+// ── math for plaques ───────────────────────────────────────────────
+// Plaques are plain spans (the semantic zoom morphs them word by word), so
+// KaTeX cannot render inside one. Model-written summaries still carry TeX
+// ("\(f\)", "\frac{a}{b}"); turn it into readable text instead of leaking
+// the source. This is deliberately a light converter, not a typesetter.
+const GREEK: Record<string, string> = {
+  alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ε',
+  zeta: 'ζ', eta: 'η', theta: 'θ', vartheta: 'ϑ', iota: 'ι', kappa: 'κ',
+  lambda: 'λ', mu: 'μ', nu: 'ν', xi: 'ξ', pi: 'π', varpi: 'ϖ', rho: 'ρ',
+  varrho: 'ϱ', sigma: 'σ', varsigma: 'ς', tau: 'τ', upsilon: 'υ', phi: 'φ',
+  varphi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω',
+  Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Xi: 'Ξ', Pi: 'Π',
+  Sigma: 'Σ', Upsilon: 'Υ', Phi: 'Φ', Psi: 'Ψ', Omega: 'Ω',
+};
+const MATH_SYMBOLS: Record<string, string> = {
+  cdot: '·', times: '×', div: '÷', pm: '±', mp: '∓', ast: '∗', star: '⋆',
+  le: '≤', leq: '≤', ge: '≥', geq: '≥', neq: '≠', ne: '≠', approx: '≈',
+  equiv: '≡', sim: '∼', propto: '∝', infty: '∞', partial: '∂', nabla: '∇',
+  sum: '∑', prod: '∏', int: '∫', oint: '∮', to: '→', rightarrow: '→',
+  leftarrow: '←', leftrightarrow: '↔', Rightarrow: '⇒', Leftarrow: '⇐',
+  mapsto: '↦', in: '∈', notin: '∉', subset: '⊂', supset: '⊃',
+  cup: '∪', cap: '∩', forall: '∀', exists: '∃', neg: '¬', land: '∧',
+  lor: '∨', therefore: '∴', degree: '°', prime: '′', ldots: '…', cdots: '⋯',
+  dots: '…', angle: '∠', perp: '⊥', parallel: '∥',
+  quad: ' ', qquad: ' ', enspace: ' ', thinspace: ' ',
+  left: '', right: '', big: '', Big: '', bigl: '', bigr: '', displaystyle: '',
+  textstyle: '', limits: '', nolimits: '', mathrm: '', mathbf: '', mathit: '',
+  mathsf: '', mathtt: '', mathcal: '', mathbb: '', operatorname: '',
+};
+const SUP: Record<string, string> = {
+  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶',
+  '7': '⁷', '8': '⁸', '9': '⁹', '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾',
+  n: 'ⁿ', i: 'ⁱ',
+};
+const SUB: Record<string, string> = {
+  '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆',
+  '7': '₇', '8': '₈', '9': '₉', '+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎',
+};
+const sup = (x: string) => [...x].map((c) => SUP[c] ?? c).join('');
+const sub = (x: string) => [...x].map((c) => SUB[c] ?? c).join('');
+
+/** read a balanced {…} group at i; null when there is none */
+function mathGroup(s: string, i: number): { body: string; end: number } | null {
+  if (s[i] !== '{') return null;
+  let depth = 0;
+  for (let j = i; j < s.length; j++) {
+    if (s[j] === '{') depth++;
+    else if (s[j] === '}' && --depth === 0) return { body: s.slice(i + 1, j), end: j + 1 };
+  }
+  return null;
+}
+function fracs(s: string): string {
+  let out = '', last = 0;
+  const re = /\\(?:d|t)?frac\s*/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s))) {
+    out += s.slice(last, m.index);
+    let i = re.lastIndex;
+    while (s[i] === ' ') i++;
+    const a = mathGroup(s, i);
+    if (!a) { out += s.slice(m.index, re.lastIndex); last = re.lastIndex; continue; }
+    let j = a.end;
+    while (s[j] === ' ') j++;
+    const b = mathGroup(s, j);
+    if (!b) { out += s.slice(m.index, re.lastIndex); last = re.lastIndex; continue; }
+    const na = fracs(a.body).trim(), nb = fracs(b.body).trim();
+    out += `${/^[\w.]+$/.test(na) ? na : `(${na})`}/${/^[\w.]+$/.test(nb) ? nb : `(${nb})`}`;
+    last = b.end;
+    re.lastIndex = b.end;
+  }
+  return out + s.slice(last);
+}
+/** TeX → readable inline text for plaques. */
+export function mathToText(input: string): string {
+  if (!input || (!input.includes('\\') && !input.includes('$'))) return input;
+  let s = fracs(input);
+  s = s.replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)');
+  s = s.replace(/\\(?:text|mathrm|mathbf|mathit|mathsf|mathtt|mathcal|mathbb|operatorname)\s*\{([^{}]*)\}/g, '$1');
+  s = s.replace(/\\(?:begin|end)\s*\{[^{}]*\}/g, '');
+  s = s.replace(/\\(?:left|right|big|Big|bigl|bigr|Bigl|Bigr)\s*/g, '');
+  s = s.replace(/\\\\/g, ' ');
+  s = s.replace(/&/g, ' ');
+  s = s.replace(/\^\{([^{}]*)\}/g, (_, x) => sup(x));
+  s = s.replace(/\^([A-Za-z0-9+\-])/g, (_, x) => sup(x));
+  s = s.replace(/_\{([^{}]*)\}/g, (_, x) => sub(x));
+  s = s.replace(/_([A-Za-z0-9+\-])/g, (_, x) => sub(x));
+  s = s.replace(/\\([a-zA-Z]+)\s*/g, (_, name: string) => MATH_SYMBOLS[name] ?? GREEK[name] ?? '');
+  s = s.replace(/\\([,,;:!])/g, ' ');
+  s = s.replace(/\\[()[\]]/g, '');
+  s = s.replace(/\$/g, '');
+  s = s.replace(/[{}]/g, '');
+  return s.replace(/\s+/g, ' ').trim();
+}
+
 /** markdown markers off, line structure kept (one pass over the whole answer, not one per sentence) */
-const cleanMd = (s: string): string => s
+const cleanMd = (s: string): string => mathToText(s)
   .replace(/\[([^\]]+)\]\((?:https?:)?[^)]*\)/g, '$1').replace(/\(?https?:\/\/\S+\)?/g, '')
   .replace(/\*\*|__|`|^#+[ \t]*|^[ \t]*[-*•][ \t]+|^[ \t]*\d+[.)][ \t]+/gm, '')
   // single-marker emphasis (*word*, _word_) at word edges; a lone leading asterisk was showing on plaques
@@ -121,7 +216,7 @@ export function ladderPieces(ladder: Ladder): LadderPiece[][] {
 export function levelText(ladder: Ladder, level: LadderLevel): string {
   const ps = pieces(ladder, level); let s = '';
   ps.forEach((p, n) => { if (n > 0 && needsSpace(ps[n - 1].text, ps[n - 1].space, p.text)) s += ' '; s += p.text; });
-  return s.trim();
+  return mathToText(s.trim());
 }
 /** Level budgets. The takeaway got 18 characters while it was cut from the answer; written, it carries the conclusion
  *  and its key qualifier the way the pre-0.5.2 lines did (the person preferred those), so it may run to a short line. */

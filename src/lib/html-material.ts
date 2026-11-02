@@ -298,12 +298,19 @@ export async function extractHtmlMaterial(source: string, opts?: HtmlSourceOptio
 
 const BASE_CSS = [
   ':root{color-scheme:light}',
-  'html,body{margin:0;padding:0;overflow-x:hidden}',
+  // `overflow-x:hidden` on body makes body a scroll container, which
+  // breaks position:sticky in the page's own TOC; clip does not.
+  'html,body{margin:0;padding:0}',
+  'html{overflow-x:hidden}',
+  'body{overflow:visible !important;overflow-x:clip !important}',
   // ancestor shells exist so the deck's descendant selectors still match a
   // detached slide; their own sizing/positioning must not (they were built
   // for a stage, we render a scroll)
   '[data-tdag-shell]{position:static !important;transform:none !important;width:auto !important;height:auto !important;min-height:0 !important;max-height:none !important;overflow:visible !important;display:block !important;margin:0 !important;padding:0 !important}',
   '[data-tdag-slide]{display:block !important;visibility:visible !important;opacity:1 !important;position:relative !important;inset:auto !important;transform:none !important;margin:0 auto !important}',
+  // scroll-spy mark for the material's own table of contents, set by the
+  // reader as the iframe scrolls; generic enough for the course decks
+  'a.tdag-active{background:rgba(8,127,132,.12) !important;color:#087f84 !important;font-weight:700 !important}',
 ].join('\n');
 
 function escapeAttr(v: string): string {
