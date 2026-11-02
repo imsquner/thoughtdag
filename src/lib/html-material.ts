@@ -123,8 +123,16 @@ function bakeMathAndImages(doc: Document, tokens: MathTokens): void {
     const alt = (img.getAttribute('alt') ?? '').trim();
     if (!/^data:/i.test(src)) return;
     if (!alt) { img.remove(); return; }
-    const markup = looksLikeTex(alt) ? mathMarkup(alt, false) : ` *[图：${alt}]* `;
+    const markup = looksLikeTex(alt) ? mathMarkup(alt, false) : ` （图：${alt}） `;
     img.replaceWith(doc.createTextNode(` ${tokenFor(tokens, markup)} `));
+  });
+  // Diagrams: an SVG's text nodes are positioned glyphs, so Turndown reads
+  // them as a run-on label soup ("输入 u 黑箱系统 输出 y"). The author's
+  // aria-label is a proper description; use it as the caption instead.
+  doc.querySelectorAll('svg[role="img"][aria-label]').forEach((svg) => {
+    const label = (svg.getAttribute('aria-label') ?? '').trim();
+    if (label.length < 10) return;
+    svg.replaceWith(doc.createTextNode(` （图：${label}） `));
   });
 }
 
@@ -152,14 +160,14 @@ export function selectionTextWithMath(range: Range): string {
   // an image contributes nothing to selection.toString(), so use its alt.
   div.querySelectorAll('img').forEach((img) => {
     const alt = (img.getAttribute('alt') ?? '').trim();
-    img.replaceWith(document.createTextNode(!alt ? '' : looksLikeTex(alt) ? ` $${alt}$ ` : ` [图：${alt}] `));
+    img.replaceWith(document.createTextNode(!alt ? '' : looksLikeTex(alt) ? ` $${alt}$ ` : ` （图：${alt}） `));
   });
   return div.textContent ?? '';
 }
 
 function cleanMarkdown(md: string): string {
   return md
-    .replace(/!\[([^\]]*)\]\(\s*data:[^)]*\)/gi, (_m, alt: string) => (alt.trim() ? `*[图：${alt.trim()}]*` : ''))
+    .replace(/!\[([^\]]*)\]\(\s*data:[^)]*\)/gi, (_m, alt: string) => (alt.trim() ? `（图：${alt.trim()}）` : ''))
     .replace(/data:[a-z0-9.+-]+\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+/gi, '')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -197,7 +205,7 @@ async function makeTurndown(tokens: MathTokens) {
     replacement: (_content, node) => {
       const alt = ((node as Element).getAttribute('alt') ?? '').trim();
       if (!alt) return '';
-      const markup = looksLikeTex(alt) ? mathMarkup(alt, false) : ` *[图：${alt}]* `;
+      const markup = looksLikeTex(alt) ? mathMarkup(alt, false) : ` （图：${alt}） `;
       return tokenFor(tokens, markup);
     },
   });
