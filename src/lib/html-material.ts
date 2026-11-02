@@ -134,6 +134,29 @@ function applyTokens(md: string, tokens: MathTokens): string {
   return cleanMarkdown(out);
 }
 
+/** Selection text for the ask bar and the model: clone the range, swap each
+ *  MathJax wrapper for its TeX, then read the text. A formula is a picture in
+ *  the DOM, so a plain selection.toString() leaves a hole where it sat. */
+export function selectionTextWithMath(range: Range): string {
+  const div = document.createElement('div');
+  div.appendChild(range.cloneContents());
+  div.querySelectorAll(MATH_SELECTOR).forEach((el) => {
+    const tex = ariaTex(el);
+    if (!tex) return;
+    const display = el.classList.contains('eqblock')
+      || el.classList.contains('mjx-block')
+      || (el as HTMLElement).getAttribute('display') === 'true';
+    el.replaceWith(document.createTextNode(display ? ` $$ ${tex} $$ ` : ` $${tex}$ `));
+  });
+  // Figure formulas in the CV deck are <img alt="…LaTeX…">, not MathJax;
+  // an image contributes nothing to selection.toString(), so use its alt.
+  div.querySelectorAll('img').forEach((img) => {
+    const alt = (img.getAttribute('alt') ?? '').trim();
+    img.replaceWith(document.createTextNode(!alt ? '' : looksLikeTex(alt) ? ` $${alt}$ ` : ` [图：${alt}] `));
+  });
+  return div.textContent ?? '';
+}
+
 function cleanMarkdown(md: string): string {
   return md
     .replace(/!\[([^\]]*)\]\(\s*data:[^)]*\)/gi, (_m, alt: string) => (alt.trim() ? `*[图：${alt.trim()}]*` : ''))

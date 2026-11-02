@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { Attachment } from '../types';
-import { buildReaderPages, type ReaderPage } from '../lib/html-material';
+import { buildReaderPages, selectionTextWithMath, type ReaderPage } from '../lib/html-material';
 import { toast } from '../lib/ui-store';
 import { useT } from '../i18n';
 
@@ -99,7 +99,7 @@ function PageFrame({ srcdoc, page, onSelect, clipMode, onClipped, clipFailedText
       // a plain click inside the page dismisses the ask bar, same as the
       // reader body (whose own mouseup never hears frame-internal clicks)
       if (!sel || sel.isCollapsed) { onSelect(null); return; }
-      const text = sel.toString().replace(/\s+/g, ' ').trim();
+      const text = (selectionTextWithMath(sel.getRangeAt(0)) || sel.toString()).replace(/\s+/g, ' ').trim();
       if (text.length < 2) return;
       const rect = sel.getRangeAt(0).getBoundingClientRect();
       const fr = frame.getBoundingClientRect();
