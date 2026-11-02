@@ -6,6 +6,7 @@ const { app, BrowserWindow, shell, utilityProcess, ipcMain, dialog, Tray, Menu, 
 const path = require('path');
 const net = require('net');
 const os = require('os');
+const fs = require('fs');
 const fsp = require('fs/promises');
 const { zstdDecompressSync } = require('node:zlib');
 
@@ -24,14 +25,19 @@ if (dataDirArg) {
   app.setPath('sessionData', dir);
 }
 
-const ROOT = app.isPackaged
+// A portable build (resources/app + resources/payload) is packaged even
+// when Electron was launched from the stock `electron` binary: app.isPackaged
+// is false there, but the payload proves the layout. Without this, the shell
+// looks for resources/runtime and dies before the window appears.
+const PACKAGED = app.isPackaged || fs.existsSync(path.join(process.resourcesPath, 'payload'));
+const ROOT = PACKAGED
   ? path.join(process.resourcesPath, 'payload')
   : path.join(__dirname, '..');
 // The why layer as a library (cli/src/lib.ts bundled by `npm run desktop:why`;
 // the payload carries a copy): the index under ~/.thoughtdag, find, recall,
 // and the memory files. Loaded on first use — a query refreshes the index
 // when a source moved on, so the first call after a while can take a moment.
-const WHY_FILE = app.isPackaged ? path.join(ROOT, 'why.mjs') : path.join(__dirname, 'why.mjs');
+const WHY_FILE = PACKAGED ? path.join(ROOT, 'why.mjs') : path.join(__dirname, 'why.mjs');
 let whyModule = null;
 function whyLib() {
   if (!whyModule) {
@@ -237,7 +243,7 @@ const ZSTD_MAX = 512 * 1024 * 1024;
 // The zstd container walk and the prefix decoder are shared with the harness
 // plugin (runtime/zstd-frames.cjs, copied into the payload). A second copy
 // here would drift from the one the plugin decodes with (#80).
-const ZSTD_RUNTIME_DIR = app.isPackaged ? path.join(process.resourcesPath, 'payload', 'runtime') : path.join(__dirname, '..', 'runtime');
+const ZSTD_RUNTIME_DIR = PACKAGED ? path.join(process.resourcesPath, 'payload', 'runtime') : path.join(__dirname, '..', 'runtime');
 const { scanZstdFrames, readZstdHead } = require(path.join(ZSTD_RUNTIME_DIR, 'zstd-frames.cjs'));
 /** Decompress a concatenated-frame zstd buffer to one contiguous Buffer. */
 function decompressZstdAll(raw) {
@@ -808,7 +814,7 @@ let codexRpc = null; // null=not started, 'dead'=CLI absent, else client
 // runs default to are handed out under userData.
 // One module per runtime under agents/, created on first use. A run is
 // addressed by its id: abort and answer find the runtime that owns it.
-const RUNTIME_DIR = app.isPackaged ? path.join(process.resourcesPath, 'payload', 'runtime') : path.join(__dirname, '..', 'runtime');
+const RUNTIME_DIR = PACKAGED ? path.join(process.resourcesPath, 'payload', 'runtime') : path.join(__dirname, '..', 'runtime');
 const agentOps = require(path.join(RUNTIME_DIR, 'agents', 'ops.cjs'));
 const RUNTIME_FACTORIES = {
   pi: () => require(path.join(RUNTIME_DIR, 'agents', 'pi.cjs')).createPiRuntime({ log: (line) => console.log(line) }),
@@ -969,7 +975,7 @@ if (!lock) {
     setupShell();
     setupSessionAtlas();
     setupAgents();
-    if (app.isPackaged) {
+    if (PACKAGED) {
       setupAutoUpdate();
     } else {
       // dev shell: the menu entry exists (preload is loaded), so answer honestly
