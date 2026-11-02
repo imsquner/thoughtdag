@@ -189,6 +189,14 @@ function ReaderOverlay({ node, onLocate, dock }: { node: ThoughtNode; onLocate: 
 
   // ── PDF document + text-layer probe ──
   const [view, setView] = useState<'original' | 'text' | 'digest'>(pdfAtt?.pageImages?.length || imageAtts.length || htmlAtt || nbAtt || linkHtml ? 'original' : 'text');
+  // A dropped file mounts the reader before its async read lands, so htmlAtt
+  // is briefly undefined and the first view falls to 'text'. Flip to the
+  // visual page once the attachment arrives — unless the person already
+  // picked a view. HTML is the reading surface; text is the fallback.
+  const viewChosen = useRef(false);
+  useEffect(() => {
+    if (!viewChosen.current && htmlAtt) setView('original');
+  }, [htmlAtt]);
   // image view zoom: 1 = fit the column; beyond it the row scrolls sideways
   const [imgZoom, setImgZoom] = useState(1);
   // zoomed past the column, the mouse drags the picture around: horizontal
@@ -215,6 +223,7 @@ function ReaderOverlay({ node, onLocate, dock }: { node: ThoughtNode; onLocate: 
   const startDigest = async () => {
     if (!docAtt || digestBusy) return;
     setDigestBusy(true);
+    viewChosen.current = true;
     setView('digest'); // the digest node streams; watch it arrive in place
     if (isViewerMode) return;
     const ok = await generateDigest(node.id, docAtt.id);
@@ -808,13 +817,13 @@ function ReaderOverlay({ node, onLocate, dock }: { node: ThoughtNode; onLocate: 
           {((pdfAtt && !pdfError) || imageAtts.length > 0 || htmlAtt || nbAtt || linkHtml) && (
             <div className="flex items-center rounded-lg border border-line overflow-hidden shrink-0 text-xs">
               <button
-                onClick={() => setView('original')}
+                onClick={() => { viewChosen.current = true; setView('original'); }}
                 className={`px-3 py-1.5 transition-colors ${view === 'original' ? 'bg-accent/10 text-accent font-medium' : 'text-ink-muted hover:bg-wash'}`}
               >
                 {t('reader.viewOriginal')}
               </button>
               <button
-                onClick={() => setView('text')}
+                onClick={() => { viewChosen.current = true; setView('text'); }}
                 className={`px-3 py-1.5 transition-colors border-l border-line ${view === 'text' ? 'bg-accent/10 text-accent font-medium' : 'text-ink-muted hover:bg-wash'}`}
               >
                 {t('reader.viewText')}
@@ -1304,7 +1313,7 @@ function ReaderOverlay({ node, onLocate, dock }: { node: ThoughtNode; onLocate: 
   // the overlay: the reader as a focused sheet over the canvas
   return (
     <div className="fixed inset-0 z-[80] bg-ink/25 backdrop-blur-[2px] flex items-center justify-center animate-fade-in" data-material-reader>
-      <div className={`bg-surface rounded-2xl shadow-2xl border border-line ${threadId ? "w-[min(1480px,96vw)]" : "w-[min(1060px,94vw)]"} h-[93vh] flex flex-col overflow-hidden transition-all duration-200`}>
+      <div className={`bg-surface rounded-2xl shadow-2xl border border-line ${threadId ? "w-[min(1640px,97vw)]" : "w-[min(1280px,95vw)]"} h-[93vh] flex flex-col overflow-hidden transition-all duration-200`}>
         {inner}
       </div>
       {askBar}

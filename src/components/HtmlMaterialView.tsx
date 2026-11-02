@@ -58,7 +58,7 @@ export function HtmlMaterialView({ att, onSelect, clipMode, onClipped, baseUrl }
   return (
     <div className="flex flex-col items-center py-6 px-4">
       {pages.map((p) => (
-        <div key={p.page ?? 0} data-page={p.page ?? undefined} className="w-full max-w-[860px]">
+        <div key={p.page ?? 0} data-page={p.page ?? undefined} className="w-full max-w-[1180px]">
           {p.page != null && (
             <div className="text-2xs text-ink-faint font-mono text-center select-none pt-4 pb-2">— p.{p.page} —</div>
           )}

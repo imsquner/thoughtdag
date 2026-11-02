@@ -23,7 +23,11 @@ const REMARK_PLUGINS = [remarkGfm, remarkMath];
 // everywhere (cards, panel, rail, reader) instead of leaking raw.
 function normalizeMath(src: string): string {
   if (!src || (!src.includes('\\(') && !src.includes('\\['))) return src;
-  const parts = src.split(/(```[\s\S]*?```|`[^`\n]*`)/g);
+  // Protect code AND existing $…$ / $$…$$ math. A TeX line break with spacing
+  // ("\\[2pt]") contains the two characters "\["; converting that as a
+  // display-math opener would cut the formula in half and swallow the prose
+  // that follows (remark-math then hands the whole paragraph to KaTeX).
+  const parts = src.split(/(```[\s\S]*?```|`[^`\n]*`|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g);
   return parts
     .map((seg, i) => (i % 2 === 1 ? seg : seg
       .replace(/\\\[([\s\S]+?)\\\]/g, (_, m) => `\n$$\n${m.trim()}\n$$\n`)

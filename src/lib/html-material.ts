@@ -66,7 +66,88 @@ function rebaseUrls(doc: Document, baseUrl: string): void {
   doc.querySelectorAll('img[srcset], source[srcset]').forEach((el) => el.removeAttribute('srcset'));
 }
 
-async function makeTurndown() {
+/** MathJax/KaTeX output keeps the original TeX in aria-label ("数学公式
+ *  \begin{aligned}…"), while the visible formula is SVG paths. The model and
+ *  the text view need the TeX, not the paths; the reader's original view
+ *  still renders the SVG because this bake runs on the extraction document
+ *  only. */
+const MATH_SELECTOR = [
+  '[role="math"][aria-label]',
+  '.math-inline[aria-label]',
+  '.mjx-inline[aria-label]',
+  '.mjx-block[aria-label]',
+  '.eqblock[aria-label]',
+].join(',');
+
+function ariaTex(el: Element): string | null {
+  const raw = (el.getAttribute('aria-label') ?? '').trim();
+  if (!raw) return null;
+  const tex = raw.replace(/^\s*(?:数学公式|公式|LaTeX)\s*[:：]?\s*/i, '').trim();
+  return tex || null;
+}
+
+/** Formulas and images carry their meaning in attributes, not text. Bake
+ *  both into text before Defuddle/Turndown so every extraction path (the
+ *  article path and the deck path) sees them — and so a data: URI can never
+ *  reach the Markdown as a wall of base64.
+ *
+ *  The TeX is parked behind a placeholder because Turndown escapes `\` and
+ *  `_` in ordinary text ("\\frac", "f\_x"), which KaTeX then reads as
+ *  literal letters. The placeholder survives that pass and is swapped for
+ *  the real `$…$` only after Turndown is done. */
+type MathTokens = Map<string, string>;
+
+function mathMarkup(tex: string, display: boolean): string {
+  return display ? `\n\n$$\n${tex}\n$$\n\n` : ` $${tex}$ `;
+}
+
+function tokenFor(tokens: MathTokens, markup: string): string {
+  const token = `⟦TDAGMATH${tokens.size}⟧`;
+  tokens.set(token, markup);
+  return token;
+}
+
+function bakeMathAndImages(doc: Document, tokens: MathTokens): void {
+  doc.querySelectorAll(MATH_SELECTOR).forEach((el) => {
+    const tex = ariaTex(el);
+    if (!tex) return;
+    const display = el.classList.contains('eqblock')
+      || el.classList.contains('mjx-block')
+      || (el as HTMLElement).getAttribute('display') === 'true'
+      || !!el.querySelector('mjx-container[display="true"]');
+    const token = tokenFor(tokens, mathMarkup(tex, display));
+    el.textContent = display ? `\n\n${token}\n\n` : ` ${token} `;
+  });
+  doc.querySelectorAll('img').forEach((img) => {
+    const src = img.getAttribute('src') ?? '';
+    const alt = (img.getAttribute('alt') ?? '').trim();
+    if (!/^data:/i.test(src)) return;
+    if (!alt) { img.remove(); return; }
+    const markup = looksLikeTex(alt) ? mathMarkup(alt, false) : ` *[图：${alt}]* `;
+    img.replaceWith(doc.createTextNode(` ${tokenFor(tokens, markup)} `));
+  });
+}
+
+function applyTokens(md: string, tokens: MathTokens): string {
+  let out = md;
+  for (const [token, markup] of tokens) out = out.split(token).join(markup);
+  return cleanMarkdown(out);
+}
+
+function cleanMarkdown(md: string): string {
+  return md
+    .replace(/!\[([^\]]*)\]\(\s*data:[^)]*\)/gi, (_m, alt: string) => (alt.trim() ? `*[图：${alt.trim()}]*` : ''))
+    .replace(/data:[a-z0-9.+-]+\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+/gi, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function looksLikeTex(s: string): boolean {
+  return /\\[a-zA-Z]+|[\^_]\{/.test(s);
+}
+
+async function makeTurndown(tokens: MathTokens) {
   const [{ default: TurndownService }, gfmMod] = await Promise.all([
     import('turndown'),
     import('@joplin/turndown-plugin-gfm'),
@@ -74,6 +155,29 @@ async function makeTurndown() {
   const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', hr: '---' });
   td.use(gfmMod.gfm);
   td.remove(['style', 'script', 'noscript', 'title']);
+  // Belt and braces: if a wrapper survives the bake (or Defuddle returns a
+  // fresh node), keep its TeX instead of descending into SVG paths.
+  td.addRule('mathLabel', {
+    filter: (node) => node.nodeType === 1 && (node as Element).matches(MATH_SELECTOR),
+    replacement: (_content, node) => {
+      const el = node as Element;
+      const tex = ariaTex(el);
+      if (!tex) return '';
+      const display = el.classList.contains('eqblock')
+        || el.classList.contains('mjx-block')
+        || (el as HTMLElement).getAttribute('display') === 'true';
+      return tokenFor(tokens, mathMarkup(tex, display));
+    },
+  });
+  td.addRule('dataImage', {
+    filter: (node) => node.nodeName === 'IMG' && /^data:/i.test((node as Element).getAttribute('src') ?? ''),
+    replacement: (_content, node) => {
+      const alt = ((node as Element).getAttribute('alt') ?? '').trim();
+      if (!alt) return '';
+      const markup = looksLikeTex(alt) ? mathMarkup(alt, false) : ` *[图：${alt}]* `;
+      return tokenFor(tokens, markup);
+    },
+  });
   return td;
 }
 
@@ -125,14 +229,16 @@ export function detectSlides(doc: Document): Element[] | null {
  *  content, falling back to a boilerplate-stripped body conversion. */
 export async function extractHtmlMaterial(source: string, opts?: HtmlSourceOptions): Promise<HtmlExtraction> {
   const doc = await sanitize(source, opts);
-  const td = await makeTurndown();
+  const tokens: MathTokens = new Map();
+  bakeMathAndImages(doc, tokens);
+  const td = await makeTurndown(tokens);
 
   const slides = detectSlides(doc);
   if (slides) {
     const parts = slides.map(
       (s, i) => `<!-- tdag-page:${i + 1} -->\n\n${td.turndown((s.cloneNode(true) as Element).outerHTML).trim()}`,
     );
-    return { markdown: parts.join('\n\n').trim(), numPages: slides.length, title: doc.title || undefined };
+    return { markdown: applyTokens(parts.join('\n\n'), tokens), numPages: slides.length, title: doc.title || undefined };
   }
 
   let title = doc.title || undefined;
@@ -153,7 +259,7 @@ export async function extractHtmlMaterial(source: string, opts?: HtmlSourceOptio
     body.querySelectorAll('script,style,noscript,nav,header,footer,aside').forEach((n) => n.remove());
     contentHtml = body.innerHTML;
   }
-  return { markdown: contentHtml ? td.turndown(contentHtml).trim() : '', title };
+  return { markdown: contentHtml ? applyTokens(td.turndown(contentHtml), tokens) : '', title };
 }
 
 // ── reader pages: sanitized HTML rendered per page in same-origin,
