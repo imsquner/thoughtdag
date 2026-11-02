@@ -311,16 +311,30 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
   roleManagerOpen: false,
   setRoleManagerOpen: (open) => set({ roleManagerOpen: open }),
-  studyPrompts: [
-    { id: 'study-concept', name: '概念讲解', prompt: '先用一句话给出结论，再用直觉或类比解释，然后给正式定义、适用条件和边界；最后指出最常见的误解。不要省略关键前提。' },
-    { id: 'study-derive', name: '公式推导', prompt: '按步骤推导，每一步写明依据（定义、定理或假设），不要跳代数；最后做量纲或特例检查，并说明公式什么时候不能用。' },
-    { id: 'study-exam', name: '做题教练', prompt: '先判断题型、已知和所求，再给解题步骤；在每一步旁边指出易错点和检查方法；最后总结可迁移的套路，不要只给答案。' },
-    { id: 'study-review', name: '复习提纲', prompt: '输出三层：必须记住的结论与公式、最容易混淆的点、可用于自测的问题。每层都给出原文依据或页码线索。' },
-  ],
-  studyDefaultPromptId: null,
+  studyPrompts: (() => {
+    try {
+      const raw = localStorage.getItem('thoughtdag.studyPrompts');
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(parsed)) return parsed;
+    } catch { /* fall through to defaults */ }
+    return [
+      { id: 'study-concept', name: '概念讲解', prompt: '先用一句话给出结论，再用直觉或类比解释，然后给正式定义、适用条件和边界；最后指出最常见的误解。不要省略关键前提。' },
+      { id: 'study-derive', name: '公式推导', prompt: '按步骤推导，每一步写明依据（定义、定理或假设），不要跳代数；最后做量纲或特例检查，并说明公式什么时候不能用。' },
+      { id: 'study-exam', name: '做题教练', prompt: '先判断题型、已知和所求，再给解题步骤；在每一步旁边指出易错点和检查方法；最后总结可迁移的套路，不要只给答案。' },
+      { id: 'study-review', name: '复习提纲', prompt: '输出三层：必须记住的结论与公式、最容易混淆的点、可用于自测的问题。每层都给出原文依据或页码线索。' },
+    ];
+  })(),
+  studyDefaultPromptId: localStorage.getItem('thoughtdag.studyDefaultPromptId') || null,
   studyPromptsOpen: false,
-  setStudyPrompts: (studyPrompts) => set({ studyPrompts }),
-  setStudyDefaultPromptId: (studyDefaultPromptId) => set({ studyDefaultPromptId }),
+  setStudyPrompts: (studyPrompts) => {
+    localStorage.setItem('thoughtdag.studyPrompts', JSON.stringify(studyPrompts));
+    set({ studyPrompts });
+  },
+  setStudyDefaultPromptId: (studyDefaultPromptId) => {
+    if (studyDefaultPromptId) localStorage.setItem('thoughtdag.studyDefaultPromptId', studyDefaultPromptId);
+    else localStorage.removeItem('thoughtdag.studyDefaultPromptId');
+    set({ studyDefaultPromptId });
+  },
   setStudyPromptsOpen: (studyPromptsOpen) => set({ studyPromptsOpen }),
   visionModelPref: localStorage.getItem('thoughtdag.visionModel') || 'auto',
   setVisionModelPref: (id) => {
