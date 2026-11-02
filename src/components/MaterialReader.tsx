@@ -773,8 +773,9 @@ function ReaderOverlay({ node, onLocate, dock }: { node: ThoughtNode; onLocate: 
   const fileFallbackTitle = kind === 'file' && !pdfAtt ? (attachments[0]?.name ?? '') : '';
   const numPages = doc?.numPages ?? pdfAtt?.numPages ?? htmlAtt?.numPages;
 
-  const askLeft = ask ? Math.max(180, Math.min(ask.x, window.innerWidth - 200)) : 0;
-  const askTop = ask ? Math.min(ask.y + 10, window.innerHeight - 150) : 0;
+  const ASK_W = 460;
+  const askLeft = ask ? Math.max(ASK_W / 2 + 8, Math.min(ask.x, window.innerWidth - ASK_W / 2 - 8)) : 0;
+  const askTop = ask ? Math.min(ask.y + 10, window.innerHeight - 320) : 0;
 
   const shownTitle = title || noteTitle || fileFallbackTitle;
   const iconButton = 'w-7 h-7 rounded-lg text-ink-faint hover:bg-wash hover:text-ink flex items-center justify-center transition-colors shrink-0';
@@ -1194,12 +1195,12 @@ function ReaderOverlay({ node, onLocate, dock }: { node: ThoughtNode; onLocate: 
   // floating ask bar under the selection: fixed, the same in every face
   const askBar = ask && (
         <div
-          className="fixed z-[95] bg-card border border-line rounded-xl shadow-xl p-2.5 w-[360px] animate-fade-in"
-          style={{ left: askLeft - 180, top: askTop }}
+          className="fixed z-[95] bg-card border border-line rounded-xl shadow-xl p-3 w-[460px] animate-fade-in"
+          style={{ left: askLeft - ASK_W / 2, top: askTop }}
           data-reader-askbar
         >
-          <div className="text-2xs text-ink-faint leading-snug mb-1.5 line-clamp-2 border-l-2 border-warm pl-2">
-            “{ask.text.slice(0, 120)}{ask.text.length > 120 ? '…' : ''}”
+          <div className="text-xs text-ink-muted leading-relaxed mb-2 max-h-32 overflow-y-auto border-l-2 border-warm pl-2.5 [&_p]:m-0">
+            <Markdown>{`“${ask.text}”`}</Markdown>
             {ask.page != null && <span className="font-mono"> · p.{ask.page}</span>}
           </div>
           <div className="flex items-end gap-1.5">
