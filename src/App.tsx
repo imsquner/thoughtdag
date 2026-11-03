@@ -1081,6 +1081,8 @@ function Canvas() {
   // Opening a material (double-click, a p.N chip, an import) turns it into a
   // workspace tab. The canvas stays tab zero; materials open beside it.
   const readerNodeId = useUiStore((s) => s.readerNodeId);
+  const materialTabs = useUiStore((s) => s.materialTabs);
+  const activeWorkspaceTab = useUiStore((s) => s.activeWorkspaceTab);
   useEffect(() => {
     if (!readerNodeId) return;
     const n = useStore.getState().nodes.find((x) => x.id === readerNodeId);
@@ -2147,21 +2149,26 @@ function Canvas() {
 
       {/* Material reading overlay: select a passage, ask, the node lands on
           the canvas immediately (a view onto the material, not a container) */}
-      <MaterialReader
-        tabbed
-        onClose={() => {
-          const ui = useUiStore.getState();
-          if (ui.readerNodeId) ui.closeMaterialTab(ui.readerNodeId);
-        }}
-        onLocate={(id) => {
-          const n = useStore.getState().nodes.find((x) => x.id === id);
-          useUiStore.getState().setActiveWorkspaceTab('canvas');
-          if (n) {
-            setSelectedNodeId(id);
-            centerNode(n, { zoom: 1 });
-          }
-        }}
-      />
+      {/* One reader per open tab, all mounted: switching tabs only toggles
+          visibility, so an HTML iframe keeps its scroll, its interactive
+          widget state and its thread instead of reloading from scratch. */}
+      {materialTabs.map((tab) => (
+        <MaterialReader
+          key={tab.nodeId}
+          materialId={tab.nodeId}
+          active={activeWorkspaceTab === tab.nodeId}
+          tabbed
+          onClose={() => useUiStore.getState().closeMaterialTab(tab.nodeId)}
+          onLocate={(id) => {
+            const n = useStore.getState().nodes.find((x) => x.id === id);
+            useUiStore.getState().setActiveWorkspaceTab('canvas');
+            if (n) {
+              setSelectedNodeId(id);
+              centerNode(n, { zoom: 1 });
+            }
+          }}
+        />
+      ))}
     </div>
   );
 }

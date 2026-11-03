@@ -81,8 +81,9 @@ const isReadable = (n: ThoughtNode): boolean =>
   n.data.stepKind === 'file' || n.data.stepKind === 'link'
   || (!n.data.stepKind && (n.data.attachments ?? []).some((a) => a.type === 'application/pdf'));
 
-export default function MaterialReader({ onLocate, tabbed, onClose }: { onLocate: (id: string) => void; tabbed?: boolean; onClose?: () => void }) {
-  const readerNodeId = useUiStore((s) => s.readerNodeId);
+export default function MaterialReader({ onLocate, tabbed, onClose, materialId, active = true }: { onLocate: (id: string) => void; tabbed?: boolean; onClose?: () => void; /** when the tab host renders one reader per tab */ materialId?: string; active?: boolean }) {
+  const activeReaderId = useUiStore((s) => s.readerNodeId);
+  const readerNodeId = materialId ?? activeReaderId;
   const node = useStore((s) => (readerNodeId ? s.nodes.find((n) => n.id === readerNodeId) : undefined));
   const dock = useReaderDock();
   useEffect(() => {
@@ -90,7 +91,11 @@ export default function MaterialReader({ onLocate, tabbed, onClose }: { onLocate
     if (readerNodeId && !node) useUiStore.getState().setReaderNodeId(null);
   }, [readerNodeId, node]);
   if (!node) return null;
-  return <ReaderOverlay key={node.id} node={node} onLocate={onLocate} dock={dock} tabbed={tabbed} onClose={onClose} />;
+  return (
+    <div style={{ display: active ? undefined : 'none' }} data-reader-host={node.id}>
+      <ReaderOverlay key={node.id} node={node} onLocate={onLocate} dock={dock} tabbed={tabbed} onClose={onClose} />
+    </div>
+  );
 }
 
 function ReaderOverlay({ node, onLocate, dock, tabbed, onClose }: { node: ThoughtNode; onLocate: (id: string) => void; dock: ReaderDock; tabbed?: boolean; onClose?: () => void }) {
