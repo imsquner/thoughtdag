@@ -13,6 +13,7 @@ import { useT, fmt } from '../i18n';
 import { isViewerMode } from '../lib/viewer';
 import { loadAttachmentContent } from '../lib/attachment-vault';
 import { HtmlMaterialView } from './HtmlMaterialView';
+import { BrowserMaterialView } from './BrowserMaterialView';
 import { NotebookView } from './NotebookView';
 import { isNotebook } from '../lib/notebook';
 import SearchToggles from './ui/SearchToggles';
@@ -879,7 +880,7 @@ function ReaderOverlay({ node, onLocate, dock, tabbed, onClose }: { node: Though
               )}
             </div>
           )}
-          {(pdfAtt || imageAtts.length > 0 || htmlAtt || linkHtml) && view === 'original' && !isViewerMode && (
+          {(pdfAtt || imageAtts.length > 0 || linkHtml) && view === 'original' && !isViewerMode && (
             <button
               onClick={() => setClipMode((v) => !v)}
               title={t('reader.clipTitle')}
@@ -983,7 +984,7 @@ function ReaderOverlay({ node, onLocate, dock, tabbed, onClose }: { node: Though
           )}
 
           {view === 'original' && !pdfAtt && htmlAtt && (
-            <HtmlMaterialView key={htmlAtt.id} att={htmlAtt} onSelect={(s) => setAsk(s ? { ...s } : null)} clipMode={clipMode} onClipped={handleClipped} />
+            <BrowserMaterialView key={htmlAtt.id} att={htmlAtt} onSelect={(s) => setAsk(s ? { ...s } : null)} />
           )}
 
           {view === 'original' && !pdfAtt && !htmlAtt && nbAtt && (
