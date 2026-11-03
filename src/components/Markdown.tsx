@@ -55,6 +55,12 @@ const SANITIZE_SCHEMA: Schema = {
   },
 };
 const REHYPE_PLUGINS: PluggableList = [rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA], rehypeHighlight, rehypeKatex];
+// KaTeX layout is ~93% of the render cost on a math-heavy answer (measured:
+// 2.1s with it, 0.15s without, on 38k chars). A streaming answer re-renders
+// every ~100ms with the whole text grown by one chunk, so a full pass locks
+// the tab. While streaming, skip highlight and KaTeX — the live text shows
+// as plain markup and the finished answer does the expensive layout once.
+const STREAM_REHYPE_PLUGINS: PluggableList = [rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA]];
 
 // Code blocks get a hover copy button (no toast: too frequent an action —
 // the icon flashes a check instead).
@@ -234,14 +240,14 @@ const COMPONENTS = { pre: Pre, table: Table, a: Anchor, img: Img };
 // memo: the unified parse + KaTeX layout is the most expensive render on a
 // card, and cards re-render far more often than their text changes (every
 // streamed chunk anywhere re-renders every card). Same string → skip.
-export const Markdown = memo(function Markdown({ children, base, diagrams = 'render' }: { children: string; base?: string; diagrams?: DiagramMode }) {
+export const Markdown = memo(function Markdown({ children, base, diagrams = 'render', streaming = false }: { children: string; base?: string; diagrams?: DiagramMode; streaming?: boolean }) {
   const t = useT();
   // a tool call the model wrote as text did not run: say so in one line instead of showing the markup
   const text = foldToolCalls(normalizeMath(children), (names) => `\n\n> ⚙ ${fmt(t('md.toolCallFolded'), { names: names.map((n) => `\`${n}\``).join(', ') || '?' })}\n\n`);
   return (
     <BaseContext.Provider value={base}>
       <DiagramContext.Provider value={diagrams}>
-        <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={COMPONENTS}>
+        <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={streaming ? STREAM_REHYPE_PLUGINS : REHYPE_PLUGINS} components={COMPONENTS}>
           {text}
         </ReactMarkdown>
       </DiagramContext.Provider>
@@ -290,7 +296,7 @@ export interface ExploreMarkSpec { text: string; nodeId: string; title: string }
 // Markdown with user highlights (and explore traces) wrapped in <mark>
 // before rendering. Callers rebuild the Set/array props every render, so
 // memo compares by CONTENT (see areMarkPropsEqual below).
-export const HighlightedMarkdown = memo(function HighlightedMarkdown({ content, highlights, exploreMarks, diagrams }: HMProps) {
+export const HighlightedMarkdown = memo(function HighlightedMarkdown({ content, highlights, exploreMarks, diagrams, streaming }: HMProps) {
   // Fuzzy-locate every span in the CLEAN markdown source first, then splice
   // tags in back-to-front. A second replace pass over already-tagged text
   // would let the fuzzy noise classes swallow pieces of the inserted tags
@@ -326,12 +332,12 @@ export const HighlightedMarkdown = memo(function HighlightedMarkdown({ content, 
   for (const s of kept) {
     processed = processed.slice(0, s.start) + wrapMatch(processed.slice(s.start, s.end), s.open) + processed.slice(s.end);
   }
-  return <Markdown diagrams={diagrams}>{processed}</Markdown>;
+  return <Markdown diagrams={diagrams} streaming={streaming}>{processed}</Markdown>;
 }, areMarkPropsEqual);
 
-type HMProps = { content: string; highlights: Set<string>; exploreMarks?: ExploreMarkSpec[]; diagrams?: DiagramMode };
+type HMProps = { content: string; highlights: Set<string>; exploreMarks?: ExploreMarkSpec[]; diagrams?: DiagramMode; streaming?: boolean };
 function areMarkPropsEqual(prev: HMProps, next: HMProps): boolean {
-  if (prev.content !== next.content || prev.diagrams !== next.diagrams) return false;
+  if (prev.content !== next.content || prev.diagrams !== next.diagrams || prev.streaming !== next.streaming) return false;
   if (prev.highlights.size !== next.highlights.size) return false;
   for (const h of prev.highlights) if (!next.highlights.has(h)) return false;
   const a = prev.exploreMarks ?? [];

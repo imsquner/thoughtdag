@@ -1151,9 +1151,9 @@ function ReaderOverlay({ node, onLocate, dock, tabbed, onClose }: { node: Though
                   ) : (
                     <div className="markdown-body text-sm text-ink leading-relaxed" data-turn-answer={turn.id}>
                       {(turn.data.highlights?.length ?? 0) > 0 ? (
-                        <HighlightedMarkdown content={turn.data.response} highlights={new Set(turn.data.highlights.map((h) => h.text))} />
+                        <HighlightedMarkdown content={turn.data.response} highlights={new Set(turn.data.highlights.map((h) => h.text))} streaming={turn.data.isLoading} />
                       ) : (
-                        <Markdown base={turn.data.importSource?.cwd}>{turn.data.response}</Markdown>
+                        <Markdown base={turn.data.importSource?.cwd} streaming={turn.data.isLoading}>{turn.data.response}</Markdown>
                       )}
                     </div>
                   )}
