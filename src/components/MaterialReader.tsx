@@ -988,8 +988,12 @@ function ReaderOverlay({ node, onLocate, dock, tabbed, onClose }: { node: Though
             )
           )}
 
-          {view === 'original' && !pdfAtt && htmlAtt && (
-            <BrowserMaterialView key={htmlAtt.id} att={htmlAtt} onSelect={(s) => setAsk(s ? { ...s } : null)} />
+          {!pdfAtt && htmlAtt && (
+            // Keep the Chromium view mounted while the text view is showing:
+            // 原版/提取文本 is a visibility toggle, not a reload.
+            <div className={view === 'original' ? 'w-full h-full min-h-0' : 'hidden'}>
+              <BrowserMaterialView key={htmlAtt.id} att={htmlAtt} onSelect={(s) => setAsk(s ? { ...s } : null)} />
+            </div>
           )}
 
           {view === 'original' && !pdfAtt && !htmlAtt && nbAtt && (
