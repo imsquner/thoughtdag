@@ -76,10 +76,17 @@ export function BrowserMaterialView({ att, onSelect }: {
     // Reading progress survives closing the tab or restarting the app: the
     // scroll offset is per attachment, restored after the page's own scripts
     // have laid the document out.
+    //
+    // Switching to the canvas hides this reader with display:none, and a
+    // hidden iframe reports scrollY 0 — it also fires a scroll event on the
+    // way out. Saved naively, that zero overwrites the real offset and the
+    // material reopens at the top. Only a visible frame may write the store.
     const scrollKey = `thoughtdag.htmlScroll.${att.id}`;
+    const onScreen = () => !!frame && frame.getClientRects().length > 0;
     let saveTimer = 0;
     let lastScroll = win?.scrollY ?? 0;
     const saveScroll = () => {
+      if (!onScreen()) return;
       lastScroll = win?.scrollY ?? lastScroll;
       window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(() => {
@@ -87,12 +94,29 @@ export function BrowserMaterialView({ att, onSelect }: {
       }, 250);
     };
     win?.addEventListener('scroll', saveScroll, { passive: true });
+
+    // The saved offset can exceed what the page has laid out yet (images,
+    // MathJax and the page's own scripts grow the document late), and
+    // scrollTo clamps to the current height — a single shot restores a
+    // shorter page and drops the rest. Retry until the document can hold
+    // the offset, then stop.
     const saved = Number(localStorage.getItem(scrollKey) ?? '0');
-    const restore = saved > 0 ? window.setTimeout(() => win?.scrollTo(0, saved), 350) : 0;
+    let restoreTimer = 0;
+    const restoreScroll = (tries = 0) => {
+      if (!(saved > 0)) return;
+      const h = idoc.documentElement?.scrollHeight ?? 0;
+      const room = h - (win?.innerHeight ?? 0);
+      if (room >= saved - 2 || tries >= 24) {
+        win?.scrollTo(0, saved);
+        return;
+      }
+      restoreTimer = window.setTimeout(() => restoreScroll(tries + 1), 120);
+    };
+    restoreScroll();
 
     cleanupRef.current = () => {
       window.clearTimeout(timer);
-      window.clearTimeout(restore);
+      window.clearTimeout(restoreTimer);
       window.clearTimeout(saveTimer);
       // the iframe may already be detached here (scrollY reads 0); write the
       // last offset observed on a real scroll event instead
@@ -103,7 +127,7 @@ export function BrowserMaterialView({ att, onSelect }: {
       idoc.removeEventListener('scroll', mark);
       cleanupRef.current = null;
     };
-  }, [onSelect]);
+  }, [onSelect, att.id]);
 
   useEffect(() => () => { cleanupRef.current?.(); }, []);
 
