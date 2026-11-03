@@ -73,10 +73,33 @@ export function BrowserMaterialView({ att, onSelect }: {
     idoc.addEventListener('scroll', mark, { passive: true });
     const timer = window.setTimeout(mark, 250);
 
+    // Reading progress survives closing the tab or restarting the app: the
+    // scroll offset is per attachment, restored after the page's own scripts
+    // have laid the document out.
+    const scrollKey = `thoughtdag.htmlScroll.${att.id}`;
+    let saveTimer = 0;
+    let lastScroll = win?.scrollY ?? 0;
+    const saveScroll = () => {
+      lastScroll = win?.scrollY ?? lastScroll;
+      window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(() => {
+        try { localStorage.setItem(scrollKey, String(Math.round(lastScroll))); } catch { /* storage full */ }
+      }, 250);
+    };
+    win?.addEventListener('scroll', saveScroll, { passive: true });
+    const saved = Number(localStorage.getItem(scrollKey) ?? '0');
+    const restore = saved > 0 ? window.setTimeout(() => win?.scrollTo(0, saved), 350) : 0;
+
     cleanupRef.current = () => {
       window.clearTimeout(timer);
+      window.clearTimeout(restore);
+      window.clearTimeout(saveTimer);
+      // the iframe may already be detached here (scrollY reads 0); write the
+      // last offset observed on a real scroll event instead
+      try { localStorage.setItem(scrollKey, String(Math.round(lastScroll))); } catch { /* storage full */ }
       idoc.removeEventListener('mouseup', onUp);
       win?.removeEventListener('scroll', mark);
+      win?.removeEventListener('scroll', saveScroll);
       idoc.removeEventListener('scroll', mark);
       cleanupRef.current = null;
     };
