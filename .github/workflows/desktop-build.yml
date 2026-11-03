@@ -34,12 +34,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Pinned: the macos-latest (macos-26) image that rolled out on
-          # 2026-09-06 (Darwin 25.6.0) breaks electron-builder 26.15's temporary
-          # signing keychain (`security set-key-partition-list` rejects the
-          # keychain password). macos-15 is arm64 too and matches our target.
-          - os: macos-15
-            script: dist:mac
+          # This fork carries no macOS signing/notarization credentials, so a
+          # mac build fails at code signing and would keep the release stuck
+          # in draft. Build Windows and Linux only; re-add macos when the
+          # secrets (MAC_CERT_*, APPLE_*) are present.
           - os: windows-latest
             script: dist:win
           - os: ubuntu-latest

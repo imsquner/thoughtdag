@@ -3,6 +3,8 @@
   "private": true,
   "version": "0.5.28",
   "description": "Desktop shell for ThoughtDAG — same app, same server, one window",
+  "author": "imsquner <370295@whut.edu.cn>",
+  "homepage": "https://github.com/imsquner/thoughtdag",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
