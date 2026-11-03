@@ -85,8 +85,13 @@ export function BrowserMaterialView({ att, onSelect }: {
     const onScreen = () => !!frame && frame.getClientRects().length > 0;
     let saveTimer = 0;
     let lastScroll = win?.scrollY ?? 0;
+    // A restore scrolls the frame itself, and the reader's own layout moves it
+    // while the panel settles — those events are not the person reading. They
+    // must not reach the store: a clamped restore would save the clamped
+    // offset and lose the position it was trying to keep.
+    let settling = false;
     const saveScroll = () => {
-      if (!onScreen()) return;
+      if (settling || !onScreen()) return;
       lastScroll = win?.scrollY ?? lastScroll;
       window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(() => {
@@ -99,28 +104,61 @@ export function BrowserMaterialView({ att, onSelect }: {
     // MathJax and the page's own scripts grow the document late), and
     // scrollTo clamps to the current height — a single shot restores a
     // shorter page and drops the rest. Retry until the document can hold
-    // the offset, then stop.
+    // the offset. Giving up means scrolling nowhere: landing at the clamp
+    // would both show the wrong page and overwrite the stored offset.
     const saved = Number(localStorage.getItem(scrollKey) ?? '0');
     let restoreTimer = 0;
-    const restoreScroll = (tries = 0) => {
-      if (!(saved > 0)) return;
-      const h = idoc.documentElement?.scrollHeight ?? 0;
-      const room = h - (win?.innerHeight ?? 0);
-      if (room >= saved - 2 || tries >= 24) {
-        win?.scrollTo(0, saved);
-        return;
-      }
-      restoreTimer = window.setTimeout(() => restoreScroll(tries + 1), 120);
+    const endSettle = () => {
+      settling = false;
+      window.clearTimeout(restoreTimer);
     };
-    restoreScroll();
+    const applyScroll = (target: number) => {
+      if (!(target > 0)) return;
+      settling = true;
+      const step = (tries: number) => {
+        const room = (idoc.documentElement?.scrollHeight ?? 0) - (win?.innerHeight ?? 0);
+        if (room >= target - 2) {
+          win?.scrollTo(0, target);
+          lastScroll = target;
+          endSettle();
+          return;
+        }
+        if (tries >= 24) { endSettle(); return; }
+        restoreTimer = window.setTimeout(() => step(tries + 1), 120);
+      };
+      step(0);
+    };
+    // A real gesture ends the settle window at once, so a deliberate scroll
+    // during the first second is never swallowed.
+    const userScrolled = () => endSettle();
+    for (const ev of ['wheel', 'touchstart', 'keydown'] as const) {
+      win?.addEventListener(ev, userScrolled, { passive: true, once: true });
+    }
+    applyScroll(saved);
+
+    // Coming back from the canvas re-shows the reader, and a frame that spent
+    // time laid out at zero size comes back at the top — the offset has to go
+    // back on the way in, not only when the document loads.
+    const seen = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      if (lastScroll > 0 && Math.abs((win?.scrollY ?? 0) - lastScroll) > 4) applyScroll(lastScroll);
+    });
+    seen.observe(frame);
 
     cleanupRef.current = () => {
       window.clearTimeout(timer);
       window.clearTimeout(restoreTimer);
       window.clearTimeout(saveTimer);
       // the iframe may already be detached here (scrollY reads 0); write the
-      // last offset observed on a real scroll event instead
-      try { localStorage.setItem(scrollKey, String(Math.round(lastScroll))); } catch { /* storage full */ }
+      // last offset observed on a real scroll event instead. A frame that is
+      // still settling never established one, and its 0 would erase the
+      // offset it was trying to restore.
+      if (!settling) {
+        try { localStorage.setItem(scrollKey, String(Math.round(lastScroll))); } catch { /* storage full */ }
+      }
+      endSettle();
+      seen.disconnect();
+      for (const ev of ['wheel', 'touchstart', 'keydown'] as const) win?.removeEventListener(ev, userScrolled);
       idoc.removeEventListener('mouseup', onUp);
       win?.removeEventListener('scroll', mark);
       win?.removeEventListener('scroll', saveScroll);
