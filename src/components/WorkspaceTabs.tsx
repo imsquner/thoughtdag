@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { FileText, Map, X } from 'lucide-react';
 import { useUiStore } from '../lib/ui-store';
 import { useI18n } from '../i18n';
@@ -15,10 +16,26 @@ export default function WorkspaceTabs() {
   const lang = useI18n((s) => s.lang);
   const nodes = useStore((s) => s.nodes);
   const canvasLabel = lang === 'zh' ? '画布' : 'Canvas';
+  const [vw, setVw] = useState(() => (typeof window === 'undefined' ? 1600 : window.innerWidth));
+  useEffect(() => {
+    const onResize = () => setVw(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  // The strip lives between the project switcher and the top-right toolbar,
+  // not across the whole window. Reserve both sides, then divide what is
+  // left among the tabs so more tabs mean narrower tabs, never an overlap.
+  const left = vw < 1100 ? 130 : 200;
+  const right = vw < 1100 ? 380 : 540;
+  const free = Math.max(240, vw - left - right);
+  const tabWidth = tabs.length
+    ? Math.max(72, Math.min(220, Math.floor((free - 96 - 4 * tabs.length) / tabs.length)))
+    : 220;
 
   return (
     <div
-      className="fixed top-3 left-1/2 -translate-x-1/2 z-[55] max-w-[min(760px,70vw)] flex items-center gap-1 rounded-full border border-line bg-card/95 backdrop-blur px-1.5 py-1 shadow-sm"
+      className="fixed top-3 z-[55] w-fit mx-auto flex items-center gap-1 rounded-full border border-line bg-card/95 backdrop-blur px-1.5 py-1 shadow-sm"
+      style={{ left, right, maxWidth: free }}
       data-workspace-tabs
       onMouseDown={(e) => e.stopPropagation()}
     >
@@ -42,10 +59,11 @@ export default function WorkspaceTabs() {
           return (
             <div
               key={tab.nodeId}
-              className={`group flex items-center gap-1 rounded-full pl-2.5 pr-1 py-1 shrink-0 max-w-[220px] transition-colors ${
+              className={`group flex items-center gap-1 rounded-full pl-2.5 pr-1 py-1 shrink-0 transition-colors ${
                 on ? 'bg-accent/10 text-accent' : 'text-ink-muted hover:bg-wash'
               }`}
               data-workspace-tab={tab.nodeId}
+              style={{ maxWidth: tabWidth }}
             >
               <button
                 onClick={() => setActive(tab.nodeId)}
