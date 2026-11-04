@@ -107,9 +107,9 @@ export function mathToText(input: string): string {
   s = s.replace(/\\\\/g, ' ');
   s = s.replace(/&/g, ' ');
   s = s.replace(/\^\{([^{}]*)\}/g, (_, x) => sup(x));
-  s = s.replace(/\^([A-Za-z0-9+\-])/g, (_, x) => sup(x));
+  s = s.replace(/\^([A-Za-z0-9+-])/g, (_, x) => sup(x));
   s = s.replace(/_\{([^{}]*)\}/g, (_, x) => sub(x));
-  s = s.replace(/_([A-Za-z0-9+\-])/g, (_, x) => sub(x));
+  s = s.replace(/_([A-Za-z0-9+-])/g, (_, x) => sub(x));
   s = s.replace(/\\([a-zA-Z]+)\s*/g, (_, name: string) => MATH_SYMBOLS[name] ?? GREEK[name] ?? '');
   s = s.replace(/\\([,,;:!])/g, ' ');
   s = s.replace(/\\[()[\]]/g, '');
